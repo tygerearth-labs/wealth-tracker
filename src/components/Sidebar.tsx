@@ -90,14 +90,14 @@ export default function Sidebar({ isOpen = true, onToggle }: SidebarProps) {
 
       <div className="p-4 border-t border-white/10">
         <Button
-          variant="outline"
+          variant="outline" style="background-color:rgb(239, 68, 68);"
           className="w-full justify-start text-white border-white/20 hover:bg-white/10"
           onClick={() => {
             if (onToggle) onToggle();
             handleMobileClose();
           }}
         >
-          <span className="mr-2"><center>Tutup</center></span>
+          <span className="container">Tutup</span>
         </Button>
       </div>
     </div>
