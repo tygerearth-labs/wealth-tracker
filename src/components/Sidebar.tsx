@@ -90,7 +90,7 @@ export default function Sidebar({ isOpen = true, onToggle }: SidebarProps) {
 
       <div className="p-4 border-t border-white/10">
         <Button
-          variant="outline" style="background-color: red;"
+          variant="outline"
           className="w-full justify-start text-white border-white/20 hover:bg-white/10"
           onClick={() => {
             if (onToggle) onToggle();
