@@ -89,16 +89,7 @@ export default function Sidebar({ isOpen = true, onToggle }: SidebarProps) {
       </nav>
 
       <div className="p-4 border-t border-white/10">
-        <Button
-          variant="outline" 
-          className="w-full justify-start text-white border-white/20 button red"
-          onClick={() => {
-            if (onToggle) onToggle();
-            handleMobileClose();
-          }}
-        >
-          <span className="container">Tutup</span>
-        </Button>
+          <span className="container">Tyger Earth | Ahtjong Labs | Black Bear</span>
       </div>
     </div>
   );
