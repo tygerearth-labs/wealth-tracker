@@ -45,10 +45,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <footer className="bg-navy-900 text-white py-6 mt-auto">
             <div className="container mx-auto px-4 text-center">
               <p className="text-sm text-gray-300">
-                Creator: Tyger Earth | Ahtjong Labs
+                Creator: Tyger Earth | Ahtjong Labs | Black Bear
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                © {new Date().getFullYear()} Whealth Tracker. All rights reserved.
+                © {new Date().getFullYear()} Wealth Tracker. All rights reserved.
               </p>
             </div>
           </footer>
