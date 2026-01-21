@@ -1,0 +1,99 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id        String   @id @default(cuid())
+  name      String
+  pin       String   @default("1234")
+  image     String?
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions     Transaction[]
+  categories       Category[]
+  savingsTargets   SavingsTarget[]
+  savingsAllocations SavingsAllocation[]
+}
+
+model Transaction {
+  id              String   @id @default(cuid())
+  profileId       String
+  type            String   // "INCOME" or "EXPENSE"
+  amount          Float
+  description     String?
+  categoryId      String
+  date            DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  profile   Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@index([date])
+  @@index([type])
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  profileId   String
+  name        String
+  type        String   // "INCOME" or "EXPENSE"
+  color       String?
+  icon        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  profile      Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([profileId])
+  @@index([type])
+}
+
+model SavingsTarget {
+  id              String   @id @default(cuid())
+  profileId       String
+  name            String
+  targetAmount    Float
+  currentAmount   Float    @default(0)
+  allocationPercentage Float   @default(0)  // Percentage of income to auto-allocate (0-100)
+  startDate       DateTime
+  endDate         DateTime
+  description     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  profile              Profile              @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  savingsAllocations   SavingsAllocation[]
+
+  @@index([profileId])
+}
+
+model SavingsAllocation {
+  id              String   @id @default(cuid())
+  profileId       String
+  savingsTargetId String
+  transactionId   String?
+  amount          Float
+  date            DateTime @default(now())
+  description     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  profile        Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  savingsTarget  SavingsTarget  @relation(fields: [savingsTargetId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@index([savingsTargetId])
+}
