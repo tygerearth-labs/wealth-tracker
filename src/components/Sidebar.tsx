@@ -97,7 +97,7 @@ export default function Sidebar({ isOpen = true, onToggle }: SidebarProps) {
             handleMobileClose();
           }}
         >
-          <span className="mr-2">Toggle Sidebar</span>
+          <span className="mr-2 text-red">Tutup</span>
         </Button>
       </div>
     </div>
