@@ -89,7 +89,7 @@ export default function Sidebar({ isOpen = true, onToggle }: SidebarProps) {
       </nav>
 
       <div className="p-4 border-t border-white/10">
-          <span className="container">Tyger Earth | Ahtjong Labs | Black Bear</span>
+          <p class="text-sm text-gray-300">Tyger Earth | Ahtjong Labs | Black Bear</p>
       </div>
     </div>
   );
