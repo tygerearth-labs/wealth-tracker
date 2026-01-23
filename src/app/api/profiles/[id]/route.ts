@@ -38,7 +38,27 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, pin, image } = body;
+    const { currentProfileId, name, pin, image } = body;
+
+    // Get the existing profile to validate ownership
+    const existingProfile = await db.profile.findUnique({
+      where: { id },
+    });
+
+    if (!existingProfile) {
+      return NextResponse.json(
+        { error: 'Profile not found' },
+        { status: 404 }
+      );
+    }
+
+    // Verify that user can only edit their own profile
+    if (currentProfileId && existingProfile.id !== currentProfileId) {
+      return NextResponse.json(
+        { error: 'You can only edit your own profile' },
+        { status: 403 }
+      );
+    }
 
     const profile = await db.profile.update({
       where: { id },
@@ -66,6 +86,28 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const body = await request.json();
+    const { currentProfileId } = body;
+
+    // Get the profile to be deleted
+    const profile = await db.profile.findUnique({
+      where: { id },
+    });
+
+    if (!profile) {
+      return NextResponse.json(
+        { error: 'Profile not found' },
+        { status: 404 }
+      );
+    }
+
+    // Verify that user can only delete their own active profile
+    if (currentProfileId && profile.id !== currentProfileId) {
+      return NextResponse.json(
+        { error: 'You can only delete your own profile' },
+        { status: 403 }
+      );
+    }
 
     await db.profile.delete({
       where: { id },
