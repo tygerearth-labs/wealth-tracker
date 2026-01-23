@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useProfile } from '@/contexts/ProfileContext';
-import { Plus, Edit, Trash2, Lock, User } from 'lucide-react';
+import { Plus, Edit, Trash2, Lock, AlertTriangle, Smartphone } from 'lucide-react';
 
 export default function ProfileSelector() {
   const {
@@ -26,6 +26,9 @@ export default function ProfileSelector() {
     updateProfile,
     deleteProfile,
   } = useProfile();
+
+  const [ipAddress, setIpAddress] = useState<string>('');
+  const [userAgent, setUserAgent] = useState<string>('');
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -40,60 +43,42 @@ export default function ProfileSelector() {
   const [editProfilePin, setEditProfilePin] = useState('');
   const [switchPin, setSwitchPin] = useState('');
 
-  const [isNewUser, setIsNewUser] = useState(false);
-  const [shouldShowCreateProfile, setShouldShowCreateProfile] = useState(false);
-
-  // Track user visit on component mount
+  // Get IP address and user agent on component mount
   useEffect(() => {
-    const trackUserVisit = async () => {
+    const getDeviceInfo = async () => {
       try {
-        // Get IP address
         const ipResponse = await fetch('/api/get-ip');
         const ipData = await ipResponse.json();
-        const ipAddress = ipData.ipAddress;
-
-        // Track visit
-        await fetch('/api/user-visit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ipAddress,
-            userAgent: navigator.userAgent,
-          }),
-        });
-
-        // Check if new user
-        const visitResponse = await fetch(`/api/user-visit?ip=${encodeURIComponent(ipAddress)}`);
-        const visitData = await visitResponse.json();
-
-        setIsNewUser(visitData.isNewUser);
-
-        // If new user and no profiles, show create profile dialog
-        if (visitData.isNewUser && !visitData.hasProfiles) {
-          setShouldShowCreateProfile(true);
-          setTimeout(() => {
-            setIsCreateOpen(true);
-          }, 1000);
-        }
+        setIpAddress(ipData.ipAddress);
+        setUserAgent(navigator.userAgent);
       } catch (error) {
-        console.error('Error tracking user visit:', error);
+        console.error('Error getting device info:', error);
+        // Fallback values
+        setIpAddress('127.0.0.1');
+        setUserAgent(navigator.userAgent);
       }
     };
 
-    trackUserVisit();
+    getDeviceInfo();
   }, []);
 
   const handleSwitchProfile = async (profileId: string, pin?: string) => {
-    const result = await switchProfile(profileId, pin);
+    const result = await switchProfile(profileId, pin, ipAddress, userAgent);
     if (!result.success) {
-      alert(result.error);
+      if (result.error === 'DEVICE_MISMATCH' || result.error?.includes('IP atau Device berbeda')) {
+        alert('❌ IP atau Device berbeda dari yang terdaftar di profil ini.\n\nSilakan buat profil baru untuk melanjutkan.');
+        // Open create profile dialog
+        setIsCreateOpen(true);
+      } else {
+        alert(result.error);
+      }
     }
     return result;
   };
 
   const handleProfileClick = (profile: any) => {
     // If already active, no need to switch
-    if (profile.isActive) return;
+    if (activeProfile && profile.id === activeProfile.id) return;
 
     // If switching to a different profile, require PIN
     setProfileToSwitch(profile);
@@ -121,7 +106,7 @@ export default function ProfileSelector() {
       return;
     }
 
-    const result = await createProfile(newProfileName, newProfilePin);
+    const result = await createProfile(newProfileName, newProfilePin, undefined, ipAddress, userAgent);
     if (result.success) {
       setNewProfileName('');
       setNewProfilePin('1234');
@@ -223,11 +208,11 @@ export default function ProfileSelector() {
                   </AvatarFallback>
                 </Avatar>
                 <span className="flex-1">{profile.name}</span>
-                {profile.isActive && (
+                {activeProfile && profile.id === activeProfile.id && (
                   <span className="h-2 w-2 bg-green-500 rounded-full" />
                 )}
               </DropdownMenuItem>
-              {profile.isActive && profiles.length > 1 && (
+              {activeProfile && profile.id === activeProfile.id && profiles.length > 1 && (
                 <DropdownMenuItem
                   className="flex items-center gap-2 cursor-pointer text-gray-500 hover:text-gray-900"
                   onClick={() => openEditDialog(profile)}
@@ -253,29 +238,39 @@ export default function ProfileSelector() {
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {shouldShowCreateProfile ? 'Selamat Datang! Buat Profil Pertama Anda' : 'Tambah Profil Baru'}
-            </DialogTitle>
+            <DialogTitle>Buat Profil Baru</DialogTitle>
             <DialogDescription>
-              {shouldShowCreateProfile
-                ? 'Sepertinya ini adalah kunjungan pertama Anda. Silakan buat profil untuk memulai pengalaman Wealth Tracker.'
-                : 'Tambah profil baru untuk mengelola keuangan Anda'}
+              Profil akan dikaitkan dengan IP dan device Anda saat ini untuk keamanan tambahan.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {shouldShowCreateProfile && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <div className="flex items-start gap-3">
-                  <User className="h-5 w-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-blue-900">Selamat datang di Wealth Tracker!</p>
-                    <p className="text-sm text-blue-700">
-                      Ini adalah kunjungan pertama Anda. Silakan buat profil untuk mulai melacak keuangan, target tabungan, dan investasi Anda.
-                    </p>
-                  </div>
+            {/* Security Info */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <Smartphone className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-blue-900">Keamanan Profil</p>
+                  <p className="text-sm text-blue-700">
+                    IP dan device Anda akan dicatat. Jika IP atau device berbeda, Anda tidak bisa login ke profil ini.
+                    Silakan buat profil baru jika login dari device yang berbeda.
+                  </p>
                 </div>
               </div>
+            </div>
+
+            {/* Device Info Display */}
+            {ipAddress && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <p className="text-xs text-gray-500 mb-1">IP & Device yang akan dicatat:</p>
+                <p className="text-sm font-medium text-gray-700 truncate">
+                  IP: {ipAddress}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  Device: {userAgent.substring(0, 60)}...
+                </p>
+              </div>
             )}
+
             <div className="space-y-2">
               <Label htmlFor="profile-name">Nama Profil</Label>
               <Input
@@ -305,7 +300,7 @@ export default function ProfileSelector() {
               Batal
             </Button>
             <Button onClick={handleCreateProfile} className="bg-navy-900 hover:bg-navy-700">
-              {shouldShowCreateProfile ? 'Mulai Sekarang' : 'Buat Profil'}
+              Buat Profil
             </Button>
           </DialogFooter>
         </DialogContent>
