@@ -5,7 +5,7 @@ import { db } from '@/lib/db';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { profileId, pin } = body;
+    const { profileId, pin, ipAddress, userAgent } = body;
 
     if (!profileId) {
       return NextResponse.json(
@@ -25,11 +25,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate PIN
     if (pin && profile.pin !== pin) {
       return NextResponse.json(
         { error: 'Invalid PIN' },
         { status: 401 }
       );
+    }
+
+    // Validate IP and Device if they were recorded when profile was created
+    if (profile.ipAddress || profile.userAgent) {
+      const ipMatches = !profile.ipAddress || profile.ipAddress === ipAddress;
+      const deviceMatches = !profile.userAgent || profile.userAgent === userAgent;
+
+      if (!ipMatches || !deviceMatches) {
+        return NextResponse.json(
+          {
+            error: 'DEVICE_MISMATCH',
+            message: 'IP atau Device berbeda dari yang terdaftar di profil ini. Silakan buat profil baru.',
+          },
+          { status: 403 }
+        );
+      }
     }
 
     // Deactivate all profiles
