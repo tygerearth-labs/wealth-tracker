@@ -103,12 +103,18 @@ export const ProfileProvider: React.FC<{ children: ReactNode }> = ({ children })
       const response = await fetch(`/api/profiles/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          currentProfileId: activeProfile?.id,
+        }),
       });
 
       if (response.ok) {
         await refreshProfiles();
         return { success: true };
+      } else if (response.status === 403) {
+        const errorData = await response.json();
+        return { success: false, error: errorData.error || 'You can only edit your own profile' };
       } else {
         const errorData = await response.json();
         return { success: false, error: errorData.error || 'Failed to update profile' };
@@ -123,11 +129,18 @@ export const ProfileProvider: React.FC<{ children: ReactNode }> = ({ children })
     try {
       const response = await fetch(`/api/profiles/${id}`, {
         method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentProfileId: activeProfile?.id,
+        }),
       });
 
       if (response.ok) {
         await refreshProfiles();
         return { success: true };
+      } else if (response.status === 403) {
+        const errorData = await response.json();
+        return { success: false, error: errorData.error || 'You can only delete your own profile' };
       } else {
         const data = await response.json();
         return { success: false, error: data.error || 'Failed to delete profile' };
