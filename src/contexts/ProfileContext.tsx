@@ -7,6 +7,8 @@ export interface Profile {
   name: string;
   pin: string;
   image: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -18,8 +20,8 @@ interface ProfileContextType {
   isLoading: boolean;
   setActiveProfile: (profile: Profile | null) => void;
   refreshProfiles: () => Promise<void>;
-  switchProfile: (profileId: string, pin?: string) => Promise<{ success: boolean; error?: string }>;
-  createProfile: (name: string, pin?: string, image?: string) => Promise<{ success: boolean; error?: string }>;
+  switchProfile: (profileId: string, pin?: string, ipAddress?: string, userAgent?: string) => Promise<{ success: boolean; error?: string }>;
+  createProfile: (name: string, pin?: string, image?: string, ipAddress?: string, userAgent?: string) => Promise<{ success: boolean; error?: string }>;
   updateProfile: (id: string, data: Partial<Profile>) => Promise<{ success: boolean; error?: string }>;
   deleteProfile: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
@@ -37,8 +39,8 @@ export const ProfileProvider: React.FC<{ children: ReactNode }> = ({ children })
       if (response.ok) {
         const data = await response.json();
         setProfiles(data);
-        const active = data.find((p: Profile) => p.isActive);
-        setActiveProfile(active || null);
+        // Do NOT auto-set activeProfile - user must login with PIN every session
+        setActiveProfile(null);
       }
     } catch (error) {
       console.error('Error fetching profiles:', error);
@@ -56,20 +58,28 @@ export const ProfileProvider: React.FC<{ children: ReactNode }> = ({ children })
     await fetchProfiles();
   };
 
-  const switchProfile = async (profileId: string, pin?: string) => {
+  const switchProfile = async (profileId: string, pin?: string, ipAddress?: string, userAgent?: string) => {
     try {
       const response = await fetch('/api/profiles/switch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId, pin }),
+        body: JSON.stringify({ profileId, pin, ipAddress, userAgent }),
       });
 
       if (response.ok) {
-        await refreshProfiles();
+        const updatedProfile = await response.json();
+        // Set activeProfile from API response
+        setActiveProfile(updatedProfile);
+        // Update profiles list to reflect the change
+        setProfiles((prevProfiles) =>
+          prevProfiles.map((p) =>
+            p.id === profileId ? { ...p, isActive: true } : { ...p, isActive: false }
+          )
+        );
         return { success: true };
       } else {
         const data = await response.json();
-        return { success: false, error: data.error || 'Failed to switch profile' };
+        return { success: false, error: data.error || data.message || 'Failed to switch profile' };
       }
     } catch (error) {
       console.error('Error switching profile:', error);
@@ -77,16 +87,22 @@ export const ProfileProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
-  const createProfile = async (name: string, pin?: string, image?: string) => {
+  const createProfile = async (name: string, pin?: string, image?: string, ipAddress?: string, userAgent?: string) => {
     try {
       const response = await fetch('/api/profiles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, pin, image }),
+        body: JSON.stringify({ name, pin, image, ipAddress, userAgent }),
       });
 
       if (response.ok) {
-        await refreshProfiles();
+        const newProfile = await response.json();
+        // Add new profile to list and set all others as inactive
+        setProfiles((prevProfiles) =>
+          prevProfiles.map((p) => ({ ...p, isActive: false })).concat(newProfile)
+        );
+        // Auto-login to newly created profile
+        setActiveProfile(newProfile);
         return { success: true };
       } else {
         const data = await response.json();
