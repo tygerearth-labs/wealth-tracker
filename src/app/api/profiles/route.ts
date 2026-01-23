@@ -21,7 +21,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, pin, image } = body;
+    const { name, pin, image, ipAddress, userAgent } = body;
 
     if (!name) {
       return NextResponse.json(
@@ -35,6 +35,8 @@ export async function POST(request: NextRequest) {
         name,
         pin: pin || '1234',
         image: image || null,
+        ipAddress: ipAddress || null,
+        userAgent: userAgent || null,
       },
     });
 
