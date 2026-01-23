@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useProfile } from '@/contexts/ProfileContext';
@@ -39,6 +39,49 @@ export default function ProfileSelector() {
   const [editProfileName, setEditProfileName] = useState('');
   const [editProfilePin, setEditProfilePin] = useState('');
   const [switchPin, setSwitchPin] = useState('');
+
+  const [isNewUser, setIsNewUser] = useState(false);
+  const [shouldShowCreateProfile, setShouldShowCreateProfile] = useState(false);
+
+  // Track user visit on component mount
+  useEffect(() => {
+    const trackUserVisit = async () => {
+      try {
+        // Get IP address
+        const ipResponse = await fetch('/api/get-ip');
+        const ipData = await ipResponse.json();
+        const ipAddress = ipData.ipAddress;
+
+        // Track visit
+        await fetch('/api/user-visit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ipAddress,
+            userAgent: navigator.userAgent,
+          }),
+        });
+
+        // Check if new user
+        const visitResponse = await fetch(`/api/user-visit?ip=${encodeURIComponent(ipAddress)}`);
+        const visitData = await visitResponse.json();
+
+        setIsNewUser(visitData.isNewUser);
+
+        // If new user and no profiles, show create profile dialog
+        if (visitData.isNewUser && !visitData.hasProfiles) {
+          setShouldShowCreateProfile(true);
+          setTimeout(() => {
+            setIsCreateOpen(true);
+          }, 1000);
+        }
+      } catch (error) {
+        console.error('Error tracking user visit:', error);
+      }
+    };
+
+    trackUserVisit();
+  }, []);
 
   const handleSwitchProfile = async (profileId: string, pin?: string) => {
     const result = await switchProfile(profileId, pin);
@@ -184,7 +227,7 @@ export default function ProfileSelector() {
                   <span className="h-2 w-2 bg-green-500 rounded-full" />
                 )}
               </DropdownMenuItem>
-              {profiles.length > 1 && (
+              {profile.isActive && profiles.length > 1 && (
                 <DropdownMenuItem
                   className="flex items-center gap-2 cursor-pointer text-gray-500 hover:text-gray-900"
                   onClick={() => openEditDialog(profile)}
@@ -210,9 +253,29 @@ export default function ProfileSelector() {
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Tambah Profil Baru</DialogTitle>
+            <DialogTitle>
+              {shouldShowCreateProfile ? 'Selamat Datang! Buat Profil Pertama Anda' : 'Tambah Profil Baru'}
+            </DialogTitle>
+            <DialogDescription>
+              {shouldShowCreateProfile
+                ? 'Sepertinya ini adalah kunjungan pertama Anda. Silakan buat profil untuk memulai pengalaman Wealth Tracker.'
+                : 'Tambah profil baru untuk mengelola keuangan Anda'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {shouldShowCreateProfile && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <User className="h-5 w-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-blue-900">Selamat datang di Wealth Tracker!</p>
+                    <p className="text-sm text-blue-700">
+                      Ini adalah kunjungan pertama Anda. Silakan buat profil untuk mulai melacak keuangan, target tabungan, dan investasi Anda.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="profile-name">Nama Profil</Label>
               <Input
@@ -232,13 +295,18 @@ export default function ProfileSelector() {
                 onChange={(e) => setNewProfilePin(e.target.value)}
                 maxLength={4}
               />
+              <p className="text-xs text-gray-500">
+                Gunakan PIN yang mudah diingat untuk keamanan profil Anda
+              </p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
               Batal
             </Button>
-            <Button onClick={handleCreateProfile}>Buat Profil</Button>
+            <Button onClick={handleCreateProfile} className="bg-navy-900 hover:bg-navy-700">
+              {shouldShowCreateProfile ? 'Mulai Sekarang' : 'Buat Profil'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
