@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
-import { TrendingUp, TrendingDown, Target, AlertCircle, Lightbulb } from 'lucide-react';
+import { TrendingUp, TrendingDown, Target, AlertCircle, Lightbulb, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface Transaction {
@@ -29,6 +29,7 @@ interface SavingsTarget {
   name: string;
   targetAmount: number;
   currentAmount: number;
+  startDate: string;
   endDate: string;
 }
 
@@ -112,8 +113,114 @@ export default function DashboardPage() {
 
   const balance = totalIncome - totalExpense;
 
-  const savingsRate = totalIncome > 0 ? ((balance / totalIncome) * 100).toFixed(1) : 0;
-  const expenseRatio = totalIncome > 0 ? ((totalExpense / totalIncome) * 100).toFixed(1) : 0;
+  const savingsRate = totalIncome > 0 ? ((balance / totalIncome) * 100) : 0;
+  const expenseRatio = totalIncome > 0 ? ((totalExpense / totalIncome) * 100) : 0;
+
+  // A. Financial Status Badge Logic
+  const getFinancialStatus = () => {
+    const rate = parseFloat(savingsRate.toFixed(1));
+    if (balance < 0) {
+      return {
+        status: 'Defisit',
+        color: 'bg-red-100 border-red-500 text-red-900',
+        icon: <AlertTriangle className="h-5 w-5 text-red-600" />,
+        description: `Pengeluaran ${(expenseRatio).toFixed(0)}% lebih besar dari pemasukan`
+      };
+    } else if (rate >= 20) {
+      return {
+        status: 'Sehat',
+        color: 'bg-green-100 border-green-500 text-green-900',
+        icon: <CheckCircle2 className="h-5 w-5 text-green-600" />,
+        description: `Cashflow positif dengan tabungan ${rate.toFixed(1)}%`
+      };
+    } else {
+      return {
+        status: 'Waspada',
+        color: 'bg-yellow-100 border-yellow-500 text-yellow-900',
+        icon: <AlertCircle className="h-5 w-5 text-yellow-600" />,
+        description: `Saldo tipis dengan tabungan ${rate.toFixed(1)}%`
+      };
+    }
+  };
+
+  const financialStatus = getFinancialStatus();
+
+  // B. Saldo Narrative
+  const getBalanceNarrative = () => {
+    if (balance < 0) {
+      const deficitRatio = totalIncome > 0 ? (totalExpense / totalIncome) : 0;
+      const daysToNegative = deficitRatio > 0 ? Math.floor(30 / (deficitRatio - 1)) : 0;
+      return {
+        narrative: `Saldo Defisit`,
+        detail: `Pengeluaran Anda ${deficitRatio.toFixed(1)}x lebih besar dari pemasukan dalam periode ini.`,
+        forecast: daysToNegative > 0 && daysToNegative < 365 
+          ? `Dengan pola ini, cashflow negatif akan berlanjut dalam ${daysToNegative} hari.`
+          : `Dengan pola ini, keuangan Anda akan terus negatif.`
+      };
+    } else if (parseFloat(savingsRate.toFixed(1)) < 10) {
+      return {
+        narrative: `Saldo Tipis`,
+        detail: `Tabungan Anda ${savingsRate.toFixed(1)}% dari pemasukan.`
+      };
+    } else {
+      return {
+        narrative: `Saldo Positif`,
+        detail: `Tabungan ${savingsRate.toFixed(1)}% dari pemasukan. Pertahankan pola ini!`
+      };
+    }
+  };
+
+  const balanceNarrative = getBalanceNarrative();
+
+  // C. Cash Flow Insight
+  const getCashFlowInsight = () => {
+    if (transactions.length === 0) return null;
+
+    const sortedDates = [...new Set(transactions.map(t => new Date(t.date).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' })))];
+    if (sortedDates.length < 2) return null;
+
+    // Calculate recent vs previous period trends
+    const midPoint = Math.floor(sortedDates.length / 2);
+    const recentDates = sortedDates.slice(-midPoint);
+    const previousDates = sortedDates.slice(0, midPoint);
+
+    const recentTransactions = transactions.filter(t => recentDates.includes(new Date(t.date).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' })));
+    const previousTransactions = transactions.filter(t => previousDates.includes(new Date(t.date).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' })));
+
+    const recentExpense = recentTransactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + t.amount, 0);
+    const previousExpense = previousTransactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + t.amount, 0);
+
+    const recentIncome = recentTransactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0);
+    const previousIncome = previousTransactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0);
+
+    const expenseChange = previousExpense > 0 ? ((recentExpense - previousExpense) / previousExpense) * 100 : 0;
+    const incomeChange = previousIncome > 0 ? ((recentIncome - previousIncome) / previousIncome) * 100 : 0;
+
+    if (Math.abs(expenseChange) > 20) {
+      return {
+        type: 'expense',
+        trend: expenseChange > 0 ? 'naik' : 'turun',
+        percentage: Math.abs(expenseChange).toFixed(0),
+        message: `Pengeluaran ${expenseChange > 0 ? 'meningkat' : 'menurun'} ${Math.abs(expenseChange).toFixed(0)}% dibanding periode sebelumnya.`
+      };
+    } else if (Math.abs(incomeChange) > 20) {
+      return {
+        type: 'income',
+        trend: incomeChange > 0 ? 'naik' : 'turun',
+        percentage: Math.abs(incomeChange).toFixed(0),
+        message: `Pemasukan ${incomeChange > 0 ? 'meningkat' : 'menurun'} ${Math.abs(incomeChange).toFixed(0)}% dibanding periode sebelumnya.`
+      };
+    } else if (recentIncome > recentExpense * 1.2) {
+      return {
+        type: 'surplus',
+        message: 'Cashflow sehat dengan surplus yang signifikan. Pertahankan!'
+      };
+    }
+
+    return null;
+  };
+
+  const cashFlowInsight = getCashFlowInsight();
 
   // Prepare data for cash flow chart
   const cashFlowData = transactions
@@ -135,6 +242,24 @@ export default function DashboardPage() {
     }, [])
     .slice(-30);
 
+  // D. Expense Distribution - Top Wasteful Category
+  const getTopWastefulCategory = () => {
+    if (categoryData.length === 0) return null;
+
+    const sortedCategories = [...categoryData].sort((a, b) => b.value - a.value);
+    const topCategory = sortedCategories[0];
+    const topPercentage = ((topCategory.value / totalExpense) * 100).toFixed(0);
+    const reductionAmount = (totalExpense * 0.2).toFixed(0);
+    const newBalance = (balance + parseFloat(reductionAmount)).toFixed(0);
+
+    return {
+      name: topCategory.name,
+      percentage: topPercentage,
+      impact: `Mengurangi kategori ini 20% akan memperbaiki saldo menjadi Rp ${newBalance.toLocaleString('id-ID')}`,
+      reductionNeeded: reductionAmount
+    };
+  };
+
   // Prepare data for category chart
   const categoryData = transactions
     .filter((t) => t.type === 'EXPENSE')
@@ -151,7 +276,101 @@ export default function DashboardPage() {
       return acc;
     }, []);
 
+  const topWastefulCategory = getTopWastefulCategory();
+
   const COLORS = ['#0f172a', '#1e40af', '#1e3a8a', '#3b82f6', '#60a5fa', '#93c5fd'];
+
+  // E. Savings Target with ETA
+  const getSavingsTargetETA = (target: SavingsTarget) => {
+    const progress = target.currentAmount / target.targetAmount;
+    const remaining = target.targetAmount - target.currentAmount;
+    
+    if (progress >= 1) {
+      return {
+        eta: '🎉 Tercapai!',
+        monthlyRequired: null
+      };
+    }
+
+    const startDate = new Date(target.startDate);
+    const endDate = new Date(target.endDate);
+    const totalMonths = Math.max(1, Math.floor((endDate.getTime() - startDate.getTime()) / (30 * 24 * 60 * 60 * 1000)));
+    const monthsPassed = Math.max(1, Math.floor((new Date().getTime() - startDate.getTime()) / (30 * 24 * 60 * 60 * 1000)));
+    const averageMonthlySavings = target.currentAmount / monthsPassed;
+    const monthsRemaining = averageMonthlySavings > 0 ? Math.ceil(remaining / averageMonthlySavings) : Infinity;
+    
+    // Calculate ETA
+    const etaDate = new Date();
+    etaDate.setMonth(etaDate.getMonth() + monthsRemaining);
+    const yearsRemaining = Math.floor(monthsRemaining / 12);
+    const monthsRemainingAfterYears = monthsRemaining % 12;
+
+    let etaText = '';
+    if (yearsRemaining > 0) {
+      etaText = `${yearsRemaining} tahun ${monthsRemainingAfterYears} bulan`;
+    } else if (monthsRemaining > 0) {
+      etaText = `${monthsRemaining} bulan`;
+    } else {
+      etaText = '∞';
+    }
+
+    // Calculate required monthly saving for 5-year goal
+    const fiveYearsInMonths = 5 * 12;
+    const requiredMonthly = remaining / fiveYearsInMonths;
+
+    return {
+      eta: etaText,
+      etaDate: etaDate.toLocaleDateString('id-ID', { year: 'numeric', month: 'long' }),
+      currentMonthly: averageMonthlySavings,
+      monthlyRequired: requiredMonthly
+    };
+  };
+
+  // F. Decision Card Recommendations
+  const getRecommendations = () => {
+    const recommendations = [];
+
+    if (balance < 0) {
+      recommendations.push({
+        icon: <AlertTriangle className="h-5 w-5 text-red-600" />,
+        title: 'Prioritas: Kurangi Pengeluaran',
+        detail: `Fokus kurangi kategori ${topWastefulCategory?.name || 'terbesar'} terlebih dahulu.`
+      });
+      recommendations.push({
+        icon: <Target className="h-5 w-5 text-blue-600" />,
+        title: 'Targetkan Surplus',
+        detail: 'Prioritaskan pemasukan sebelum pengeluaran bulan depan.'
+      });
+    } else if (parseFloat(savingsRate.toFixed(1)) < 20) {
+      recommendations.push({
+        icon: <TrendingUp className="h-5 w-5 text-green-600" />,
+        title: 'Tingkatkan Tabungan',
+        detail: 'Targetkan tabungan minimal 20% dari pemasukan.'
+      });
+      recommendations.push({
+        icon: <Lightbulb className="h-5 w-5 text-yellow-600" />,
+        title: 'Review Pengeluaran Rutin',
+        detail: 'Cari langganan atau pengeluaran yang bisa dihilangkan.'
+      });
+    } else {
+      recommendations.push({
+        icon: <CheckCircle2 className="h-5 w-5 text-green-600" />,
+        title: 'Luar Biasa!',
+        detail: 'Pola keuangan Anda sangat sehat. Pertahankan!'
+      });
+      if (savingsTargets.length === 0) {
+        recommendations.push({
+          icon: <Target className="h-5 w-5 text-blue-600" />,
+          title: 'Buat Target Tabungan',
+          detail: 'Dengan cashflow sehat, saatnya membuat target tabungan jangka panjang.'
+        });
+      }
+    }
+
+    return recommendations;
+  };
+
+  const recommendations = getRecommendations();
 
   if (isLoading) {
     return <DashboardLayout><div>Loading...</div></DashboardLayout>;
@@ -226,6 +445,43 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* A. Financial Status Badge */}
+        <Card className={`${financialStatus.color} border-2`}>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-center gap-3">
+              {financialStatus.icon}
+              <div className="text-center">
+                <div className="text-sm font-semibold">Status Keuangan</div>
+                <div className="text-2xl font-bold">{financialStatus.status}</div>
+                <div className="text-sm mt-1 opacity-90">{financialStatus.description}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* F. Decision Card */}
+        <Card className="bg-gradient-to-br from-indigo-50 to-white border-indigo-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-indigo-900">
+              <Lightbulb className="h-5 w-5" />
+              Rekomendasi Bulan Ini
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-3">
+              {recommendations.map((rec, idx) => (
+                <li key={idx} className="flex items-start gap-3">
+                  <div className="mt-0.5">{rec.icon}</div>
+                  <div>
+                    <div className="font-semibold text-navy-900">{rec.title}</div>
+                    <div className="text-sm text-gray-600">{rec.detail}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="bg-gradient-to-br from-green-50 to-white border-green-200">
@@ -256,21 +512,22 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-200">
+          {/* B. Saldo with Narrative */}
+          <Card className={`bg-gradient-to-br ${balance >= 0 ? 'from-blue-50' : 'from-red-50'} to-white border-2 ${balance >= 0 ? 'border-blue-200' : 'border-red-200'}`}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-blue-900">
-                Saldo
+              <CardTitle className={`text-sm font-medium ${balance >= 0 ? 'text-blue-900' : 'text-red-900'}`}>
+                {balanceNarrative.narrative}
               </CardTitle>
-              <Target className="h-5 w-5 text-blue-600" />
+              <Target className={`h-5 w-5 ${balance >= 0 ? 'text-blue-600' : 'text-red-600'}`} />
             </CardHeader>
             <CardContent>
-              <div
-                className={`text-2xl font-bold ${
-                  balance >= 0 ? 'text-blue-900' : 'text-red-900'
-                }`}
-              >
+              <div className={`text-2xl font-bold ${balance >= 0 ? 'text-blue-900' : 'text-red-900'}`}>
                 Rp {balance.toLocaleString('id-ID')}
               </div>
+              <p className="text-xs mt-2 text-gray-600">{balanceNarrative.detail}</p>
+              {balanceNarrative.forecast && (
+                <p className="text-xs mt-1 text-gray-700 font-medium">{balanceNarrative.forecast}</p>
+              )}
             </CardContent>
           </Card>
 
@@ -283,10 +540,10 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-purple-900">
-                {savingsRate}%
+                {savingsRate.toFixed(1)}%
               </div>
               <p className="text-xs text-purple-700 mt-1">
-                {parseFloat(savingsRate) >= 20 ? 'Sehat ✓' : 'Perlu ditingkatkan'}
+                {parseFloat(savingsRate.toFixed(1)) >= 20 ? 'Sehat ✓' : 'Perlu ditingkatkan'}
               </p>
             </CardContent>
           </Card>
@@ -294,6 +551,7 @@ export default function DashboardPage() {
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* C. Cash Flow Chart with Insight */}
           <Card>
             <CardHeader>
               <CardTitle>Grafik Arus Kas</CardTitle>
@@ -314,9 +572,25 @@ export default function DashboardPage() {
                   <Line type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={2} name="Pengeluaran" />
                 </LineChart>
               </ResponsiveContainer>
+              {/* C. Cash Flow Insight Line */}
+              {cashFlowInsight && (
+                <div className={`mt-4 p-3 rounded-lg border-2 ${
+                  cashFlowInsight.type === 'expense' 
+                    ? 'bg-red-50 border-red-300 text-red-800' 
+                    : cashFlowInsight.type === 'income'
+                    ? 'bg-green-50 border-green-300 text-green-800'
+                    : 'bg-blue-50 border-blue-300 text-blue-800'
+                }`}>
+                  <div className="flex items-start gap-2">
+                    <TrendingUp className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm font-medium">{cashFlowInsight.message}</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
+          {/* D. Expense Distribution with Decision */}
           <Card>
             <CardHeader>
               <CardTitle>Distribusi Pengeluaran</CardTitle>
@@ -348,11 +622,25 @@ export default function DashboardPage() {
                   Belum ada data pengeluaran
                 </div>
               )}
+              {/* D. Top Wasteful Category Alert */}
+              {topWastefulCategory && (
+                <div className={`mt-4 p-3 rounded-lg border-2 bg-orange-50 border-orange-400 text-orange-900`}>
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0 text-orange-600" />
+                    <div>
+                      <p className="text-sm font-semibold">
+                        {topWastefulCategory.name} ({topWastefulCategory.percentage}%)
+                      </p>
+                      <p className="text-xs mt-1">{topWastefulCategory.impact}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Savings Progress */}
+        {/* E. Savings Progress with ETA */}
         <Card>
           <CardHeader>
             <CardTitle>Progress Tabungan</CardTitle>
@@ -363,8 +651,10 @@ export default function DashboardPage() {
               <div className="space-y-6">
                 {savingsTargets.map((target) => {
                   const progress = (target.currentAmount / target.targetAmount) * 100;
+                  const etaInfo = getSavingsTargetETA(target);
+                  
                   return (
-                    <div key={target.id} className="space-y-2">
+                    <div key={target.id} className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
                           <h4 className="font-semibold text-navy-900">{target.name}</h4>
@@ -380,6 +670,44 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <Progress value={progress} className="h-2" />
+                      
+                      {/* E. ETA and Required Monthly Saving */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <p className="text-xs text-blue-700 font-medium mb-1">
+                              Estimasi Tercapai (ETA)
+                            </p>
+                            <p className="text-sm font-semibold text-blue-900">
+                              {etaInfo.etaDate}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              {etaInfo.eta !== '🎉 Tercapai!' && `Dalam ${etaInfo.eta}`}
+                            </p>
+                          </div>
+                          {etaInfo.monthlyRequired && progress < 100 && (
+                            <div>
+                              <p className="text-xs text-blue-700 font-medium mb-1">
+                                Target 5 Tahun
+                              </p>
+                              <p className="text-sm font-semibold text-blue-900">
+                                Rp {etaInfo.monthlyRequired.toLocaleString('id-ID')} / bln
+                              </p>
+                              <p className="text-xs text-gray-600">
+                                Tabungan bulanan yang diperlukan
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        {progress < 100 && etaInfo.currentMonthly > 0 && (
+                          <div className="mt-2 pt-2 border-t border-blue-200">
+                            <p className="text-xs text-gray-600">
+                              Tabungan rata-rata saat ini: Rp {etaInfo.currentMonthly.toLocaleString('id-ID')} / bln
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      
                       <p className="text-xs text-gray-500">
                         Sisa: Rp {(target.targetAmount - target.currentAmount).toLocaleString('id-ID')}
                       </p>
