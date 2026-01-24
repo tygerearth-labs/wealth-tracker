@@ -440,15 +440,11 @@ export default function DashboardPage() {
 
   if (!activeProfile) {
     return (
-      <DashboardLayout>
+       <DashboardLayout>
         <div className="flex flex-col items-center justify-center min-h-[50vh]">
           <AlertCircle className="h-16 w-16 text-navy-900 mb-4" />
-          <h2 className="text-2xl font-bold text-navy-900 mb-2">
-            Profil Tidak Dipilih
-          </h2>
-          <p className="text-gray-600 mb-4">
-            Silakan pilih atau buat profil untuk mulai menggunakan aplikasi
-          </p>
+          <h2 className="text-2xl font-bold text-navy-900 mb-2">Profil Tidak Dipilih</h2>
+          <p className="text-gray-600">Silakan pilih profil untuk melanjutkan</p>
         </div>
       </DashboardLayout>
     );
