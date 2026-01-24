@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useProfile } from '@/contexts/ProfileContext';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Lock, TrendingUp, Target, Timer } from 'lucide-react';
+import { Lock, Timer } from 'lucide-react';
 
 /* =========================
    PHASE CONFIG
@@ -17,8 +18,8 @@ const PHASES = [
     emoji: '🐛',
     min: 0,
     max: 1_000_000,
-    narrative: 'Bertahan hidup. Fokus disiplin dan kontrol bocor kecil.',
-    advice: 'Catat semua pengeluaran. Jangan mikir investasi dulu.',
+    narrative: 'Fase bertahan hidup. Disiplin lebih penting dari besar kecilnya uang.',
+    advice: 'Catat semua pengeluaran. Tutup kebocoran.',
   },
   {
     level: 2,
@@ -26,7 +27,7 @@ const PHASES = [
     emoji: '🐜',
     min: 1_000_000,
     max: 5_000_000,
-    narrative: 'Mulai konsisten. Sedikit tapi rutin.',
+    narrative: 'Sedikit tapi konsisten. Pondasi sedang dibangun.',
     advice: 'Bangun dana darurat 3 bulan.',
   },
   {
@@ -35,8 +36,8 @@ const PHASES = [
     emoji: '🐺',
     min: 5_000_000,
     max: 50_000_000,
-    narrative: 'Berburu peluang. Multiple income mulai terasa.',
-    advice: 'Pisahkan modal kerja dan tabungan.',
+    narrative: 'Mulai berburu peluang. Multiple income terasa.',
+    advice: 'Pisahkan tabungan, modal, dan gaya hidup.',
   },
   {
     level: 4,
@@ -44,8 +45,8 @@ const PHASES = [
     emoji: '🦁',
     min: 50_000_000,
     max: 250_000_000,
-    narrative: 'Kuasai wilayah. Risiko harus terukur.',
-    advice: 'Mulai diversifikasi aset & proteksi.',
+    narrative: 'Wilayah sudah luas. Kesalahan kecil mahal.',
+    advice: 'Diversifikasi aset dan kelola risiko.',
   },
   {
     level: 5,
@@ -53,25 +54,60 @@ const PHASES = [
     emoji: '🐉',
     min: 250_000_000,
     max: Infinity,
-    narrative: 'Penjaga kekayaan. Main di strategi & kontrol.',
-    advice: 'Fokus compounding & capital preservation.',
+    narrative: 'Penjaga kekayaan. Fokus strategi dan kontrol.',
+    advice: 'Mainkan compounding dan capital preservation.',
   },
 ];
-
-/* =========================
-   HELPERS
-========================= */
 
 const formatIDR = (n: number) =>
   `Rp ${n.toLocaleString('id-ID')}`;
 
 export default function DashboardPage() {
-  /**
-   * SIMULASI DATA
-   * ganti nanti pakai data asli lu
-   */
-  const totalIncome = 25_000_000;
-  const totalExpense = 18_000_000;
+  const { activeProfile, isLoading } = useProfile();
+  const [transactions, setTransactions] = useState<any[]>([]);
+
+  /* =========================
+     FETCH DATA
+  ========================= */
+
+  useEffect(() => {
+    if (!activeProfile) return;
+
+    fetch(`/api/transactions?profileId=${activeProfile.id}`)
+      .then(res => res.json())
+      .then(data => setTransactions(data))
+      .catch(() => setTransactions([]));
+  }, [activeProfile]);
+
+  /* =========================
+     DATA READY GATE
+  ========================= */
+
+  const dataReady =
+    !isLoading &&
+    activeProfile &&
+    transactions.length > 0;
+
+  /* =========================
+     BALANCE (SOURCE OF TRUTH)
+  ========================= */
+
+  const totalIncome = useMemo(
+    () =>
+      transactions
+        .filter(t => t.type === 'INCOME')
+        .reduce((s, t) => s + t.amount, 0),
+    [transactions]
+  );
+
+  const totalExpense = useMemo(
+    () =>
+      transactions
+        .filter(t => t.type === 'EXPENSE')
+        .reduce((s, t) => s + t.amount, 0),
+    [transactions]
+  );
+
   const balance = totalIncome - totalExpense;
 
   const avgMonthlySaving = Math.max(balance, 0);
@@ -81,20 +117,24 @@ export default function DashboardPage() {
   ========================= */
 
   const currentPhase = useMemo(() => {
-    return PHASES.find(
-      (p) => balance >= p.min && balance < p.max
-    ) || PHASES[0];
-  }, [balance]);
+    if (!dataReady) return null;
+    return (
+      PHASES.find(
+        p => balance >= p.min && balance < p.max
+      ) || PHASES[0]
+    );
+  }, [balance, dataReady]);
 
-  const nextPhase = PHASES.find(
-    (p) => p.level === currentPhase.level + 1
-  );
+  const nextPhase = currentPhase
+    ? PHASES.find(p => p.level === currentPhase.level + 1)
+    : null;
 
-  const phaseProgress = nextPhase
-    ? ((balance - currentPhase.min) /
-        (nextPhase.min - currentPhase.min)) *
-      100
-    : 100;
+  const phaseProgress =
+    currentPhase && nextPhase
+      ? ((balance - currentPhase.min) /
+          (nextPhase.min - currentPhase.min)) *
+        100
+      : 0;
 
   /* =========================
      ETA TO NEXT PHASE
@@ -106,40 +146,78 @@ export default function DashboardPage() {
       : null;
 
   /* =========================
-     UNLOCK BADGE (ONCE)
+     SAFE LEVEL UP CHECK
   ========================= */
 
-  const [lastLevel, setLastLevel] = useState<number>(0);
-
   useEffect(() => {
-    const saved = Number(localStorage.getItem('lastPhase') || 0);
-    setLastLevel(saved);
+    if (!currentPhase) return;
 
-    if (currentPhase.level > saved) {
+    const last = Number(
+      localStorage.getItem('lastPhase') || 0
+    );
+
+    if (currentPhase.level > last) {
       localStorage.setItem(
         'lastPhase',
         currentPhase.level.toString()
       );
-      alert(
-        `🏅 LEVEL UP!\nKamu masuk fase ${currentPhase.emoji} ${currentPhase.name}`
+      // nanti ganti ke toast/modal
+      console.info(
+        `LEVEL UP: ${currentPhase.name}`
       );
     }
-  }, [currentPhase.level]);
+  }, [currentPhase]);
+
+  /* =========================
+     RENDER STATES
+  ========================= */
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="text-center py-20 text-gray-500">
+          Menyiapkan dashboard...
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!activeProfile) {
+    return (
+      <DashboardLayout>
+        <div className="text-center py-20 text-gray-500">
+          Pilih profil untuk mulai.
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!dataReady) {
+    return (
+      <DashboardLayout>
+        <div className="text-center py-20 text-gray-500">
+          Menganalisa progres keuangan...
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  /* =========================
+     UI
+  ========================= */
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
 
-        {/* =========================
-            PHASE CARD (MAIN)
-        ========================= */}
+        {/* CURRENT PHASE */}
         <Card className="border-2">
           <CardHeader>
             <CardTitle className="text-center text-2xl">
-              {currentPhase.emoji} Fase {currentPhase.name}
+              {currentPhase!.emoji} Fase {currentPhase!.name}
             </CardTitle>
             <p className="text-center text-sm text-gray-600">
-              {currentPhase.narrative}
+              {currentPhase!.narrative}
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -151,9 +229,9 @@ export default function DashboardPage() {
             <Progress value={phaseProgress} />
 
             {nextPhase && (
-              <div className="text-sm text-center text-gray-600">
+              <p className="text-center text-sm text-gray-600">
                 Menuju {nextPhase.emoji} {nextPhase.name}
-              </div>
+              </p>
             )}
 
             {etaMonths && (
@@ -164,22 +242,21 @@ export default function DashboardPage() {
             )}
 
             <div className="bg-blue-50 p-3 rounded-md text-sm text-blue-900">
-              <strong>Advice:</strong> {currentPhase.advice}
+              <strong>Advice:</strong> {currentPhase!.advice}
             </div>
+
           </CardContent>
         </Card>
 
-        {/* =========================
-            PHASE ROADMAP
-        ========================= */}
+        {/* PHASE ROADMAP */}
         <Card>
           <CardHeader>
             <CardTitle>Roadmap Fase Keuangan</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
 
-            {PHASES.map((p) => {
-              const locked = p.level > currentPhase.level;
+            {PHASES.map(p => {
+              const locked = p.level > currentPhase!.level;
 
               return (
                 <div
@@ -187,7 +264,7 @@ export default function DashboardPage() {
                   className={`p-3 border rounded-md relative ${
                     locked
                       ? 'opacity-40 blur-[1px]'
-                      : 'bg-white'
+                      : ''
                   }`}
                 >
                   <div className="flex justify-between items-center">
@@ -217,33 +294,6 @@ export default function DashboardPage() {
 
           </CardContent>
         </Card>
-
-        {/* =========================
-            QUICK SUMMARY
-        ========================= */}
-        <div className="grid grid-cols-2 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-sm text-gray-600">
-                Pemasukan
-              </div>
-              <div className="font-bold text-green-700">
-                {formatIDR(totalIncome)}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-sm text-gray-600">
-                Pengeluaran
-              </div>
-              <div className="font-bold text-red-700">
-                {formatIDR(totalExpense)}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
 
       </div>
     </DashboardLayout>
