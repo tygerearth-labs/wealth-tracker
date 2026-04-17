@@ -1,31 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { cookies } from 'next/headers';
 
-// GET all categories with optional filtering
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const profileId = searchParams.get('profileId');
-    const type = searchParams.get('type'); // INCOME or EXPENSE
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('userId')?.value;
 
-    const where: any = {};
-
-    if (profileId) {
-      where.profileId = profileId;
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (type) {
-      where.type = type;
-    }
+    const searchParams = request.nextUrl.searchParams;
+    const type = searchParams.get('type'); // 'income' or 'expense'
+
+    const whereClause: any = { userId };
+    if (type) whereClause.type = type;
 
     const categories = await db.category.findMany({
-      where,
-      orderBy: { createdAt: 'asc' },
+      where: whereClause,
+      orderBy: {
+        name: 'asc',
+      },
+      include: {
+        _count: {
+          select: {
+            transactions: true,
+          },
+        },
+      },
     });
 
-    return NextResponse.json(categories);
+    return NextResponse.json({ categories });
+
   } catch (error) {
-    console.error('Error fetching categories:', error);
+    console.error('Categories GET error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch categories' },
       { status: 500 }
@@ -33,32 +42,46 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST create category
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { profileId, name, type, color, icon } = body;
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('userId')?.value;
 
-    if (!profileId || !name || !type) {
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { name, type, color, icon } = body;
+
+    if (!name || !type) {
       return NextResponse.json(
-        { error: 'Profile ID, name, and type are required' },
+        { error: 'Name and type are required' },
+        { status: 400 }
+      );
+    }
+
+    if (!['income', 'expense'].includes(type)) {
+      return NextResponse.json(
+        { error: 'Type must be income or expense' },
         { status: 400 }
       );
     }
 
     const category = await db.category.create({
       data: {
-        profileId,
         name,
         type,
-        color: color || '#000000',
-        icon: icon || null,
+        color: color || '#6b7280',
+        icon: icon || 'Package',
+        userId,
       },
     });
 
-    return NextResponse.json(category, { status: 201 });
+    return NextResponse.json({ category }, { status: 201 });
+
   } catch (error) {
-    console.error('Error creating category:', error);
+    console.error('Category POST error:', error);
     return NextResponse.json(
       { error: 'Failed to create category' },
       { status: 500 }

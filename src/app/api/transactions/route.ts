@@ -1,51 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { cookies } from 'next/headers';
 
-// GET all transactions with optional filtering
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const profileId = searchParams.get('profileId');
-    const type = searchParams.get('type'); // INCOME or EXPENSE
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('userId')?.value;
+
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const searchParams = request.nextUrl.searchParams;
+    const type = searchParams.get('type'); // 'income' or 'expense'
+    const categoryId = searchParams.get('categoryId');
     const month = searchParams.get('month');
     const year = searchParams.get('year');
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
 
-    const where: any = {};
-
-    if (profileId) {
-      where.profileId = profileId;
-    }
-
-    if (type) {
-      where.type = type;
-    }
-
+    const whereClause: any = { userId };
+    if (type) whereClause.type = type;
+    if (categoryId) whereClause.categoryId = categoryId;
     if (month && year) {
-      where.date = {
+      whereClause.date = {
         gte: new Date(parseInt(year), parseInt(month) - 1, 1),
         lt: new Date(parseInt(year), parseInt(month), 1),
-      };
-    } else if (startDate && endDate) {
-      where.date = {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
       };
     }
 
     const transactions = await db.transaction.findMany({
-      where,
+      where: whereClause,
       include: {
         category: true,
-        profile: true,
       },
-      orderBy: { date: 'desc' },
+      orderBy: {
+        date: 'desc',
+      },
     });
 
-    return NextResponse.json(transactions);
+    return NextResponse.json({ transactions });
+
   } catch (error) {
-    console.error('Error fetching transactions:', error);
+    console.error('Transactions GET error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch transactions' },
       { status: 500 }
@@ -53,82 +48,156 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST create transaction
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { profileId, type, amount, description, categoryId, date } = body;
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('userId')?.value;
 
-    if (!profileId || !type || !amount || !categoryId) {
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { type, amount, description, categoryId, date, targetId, allocationPercentage } = body;
+
+    if (!type || !amount) {
       return NextResponse.json(
-        { error: 'Profile ID, type, amount, and category ID are required' },
+        { error: 'Type and amount are required' },
         { status: 400 }
       );
     }
 
-    const transaction = await db.transaction.create({
-      data: {
-        profileId,
-        type,
-        amount: parseFloat(amount),
-        description,
-        categoryId,
-        date: date ? new Date(date) : new Date(),
-      },
-      include: {
-        category: true,
-        profile: true,
-      },
-    });
+    // Ensure numeric types are properly parsed
+    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    const numAllocationPct = allocationPercentage != null ? parseFloat(allocationPercentage) : 0;
 
-    // Auto-allocate savings for income transactions
-    if (type === 'INCOME') {
-      try {
-        // Get all active savings targets with allocationPercentage > 0
-        const savingsTargets = await db.savingsTarget.findMany({
-          where: {
-            profileId,
-            allocationPercentage: {
-              gt: 0,
-            },
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return NextResponse.json(
+        { error: 'Invalid amount' },
+        { status: 400 }
+      );
+    }
+    if (isNaN(numAllocationPct)) {
+      return NextResponse.json(
+        { error: 'Invalid allocation percentage' },
+        { status: 400 }
+      );
+    }
+
+    // Handle category - find or create default category if not provided
+    let category;
+    if (categoryId && categoryId !== 'none') {
+      // Verify category belongs to user
+      category = await db.category.findFirst({
+        where: {
+          id: categoryId,
+          userId,
+        },
+      });
+
+      if (!category) {
+        return NextResponse.json(
+          { error: 'Category not found' },
+          { status: 404 }
+        );
+      }
+    } else {
+      // Find or create default category for quick deposits
+      const defaultCategoryName = type === 'income' ? 'Setoran Cepat' : 'Pengeluaran Lainnya';
+      const defaultCategoryColor = type === 'income' ? '#10b981' : '#ef4444';
+      const defaultCategoryIcon = type === 'income' ? 'Landmark' : 'Send';
+
+      category = await db.category.findFirst({
+        where: {
+          name: defaultCategoryName,
+          type,
+          userId,
+        },
+      });
+
+      if (!category) {
+        category = await db.category.create({
+          data: {
+            name: defaultCategoryName,
+            type,
+            color: defaultCategoryColor,
+            icon: defaultCategoryIcon,
+            userId,
           },
         });
-
-        // Create allocations for each target
-        for (const target of savingsTargets) {
-          const allocationAmount = (parseFloat(amount) * target.allocationPercentage) / 100;
-
-          if (allocationAmount > 0) {
-            await db.savingsAllocation.create({
-              data: {
-                profileId,
-                savingsTargetId: target.id,
-                transactionId: transaction.id,
-                amount: allocationAmount,
-                description: `Alokasi otomatis dari pemasukan`,
-              },
-            });
-
-            // Update currentAmount of savings target
-            await db.savingsTarget.update({
-              where: { id: target.id },
-              data: {
-                currentAmount: {
-                  increment: allocationAmount,
-                },
-              },
-            });
-          }
-        }
-      } catch (allocationError) {
-        console.error('Error in auto-allocation:', allocationError);
-        // Don't fail the transaction if allocation fails
       }
     }
 
-    return NextResponse.json(transaction, { status: 201 });
+    // Handle allocation to savings target
+    let targetSavingsId: string | null = null;
+    let allocationAmount = 0;
+    let allocationPct = 0;
+
+    if (type === 'income' && targetId && numAllocationPct > 0) {
+      targetSavingsId = targetId;
+      allocationPct = numAllocationPct;
+      allocationAmount = (numAmount * numAllocationPct) / 100;
+
+      // Validate target exists BEFORE creating transaction (atomic approach)
+      if (allocationAmount > 0 && targetSavingsId) {
+        const savingsTarget = await db.savingsTarget.findFirst({
+          where: { id: targetSavingsId, userId },
+        });
+        if (!savingsTarget) {
+          return NextResponse.json(
+            { error: 'Savings target not found' },
+            { status: 404 }
+          );
+        }
+        if (allocationPct < 0 || allocationPct > 100) {
+          return NextResponse.json(
+            { error: 'Allocation percentage must be between 0 and 100' },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // Create transaction (and allocation atomically if applicable)
+    const transaction = await db.transaction.create({
+      data: {
+        type,
+        amount: numAmount,
+        description,
+        categoryId: category.id,
+        userId,
+        date: date ? new Date(date) : new Date(),
+        ...(targetSavingsId && allocationAmount > 0
+          ? {
+              allocation: {
+                create: {
+                  targetId: targetSavingsId,
+                  userId,
+                  amount: allocationAmount,
+                  percentage: allocationPct,
+                },
+              },
+            }
+          : {}),
+      },
+      include: {
+        category: true,
+        allocation: true,
+      },
+    });
+
+    // Update savings target current amount (separate from create for Prisma compatibility)
+    if (targetSavingsId && allocationAmount > 0) {
+      await db.savingsTarget.update({
+        where: { id: targetSavingsId },
+        data: { currentAmount: { increment: allocationAmount } },
+      });
+    }
+
+    return NextResponse.json({ transaction }, { status: 201 });
+
   } catch (error) {
-    console.error('Error creating transaction:', error);
+    console.error('Transaction POST error:', error);
     return NextResponse.json(
       { error: 'Failed to create transaction' },
       { status: 500 }

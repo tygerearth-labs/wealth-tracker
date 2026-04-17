@@ -1,27 +1,49 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
-import { ProfileProvider } from "@/contexts/ProfileContext";
-import { ThemeProvider } from "next-themes";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 
-const inter = Inter({
+const geistSans = Geist({
+  variable: "--font-geist-sans",
   subsets: ["latin"],
-  variable: "--font-inter",
 });
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#000000",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Wealth Tracker",
+  },
+};
 
 export const metadata: Metadata = {
   title: "Wealth Tracker - Kelola Keuangan Anda",
-  description: "Aplikasi pencatatan keuangan modern untuk memantau pemasukan, pengeluaran, dan target tabungan Anda.",
-  keywords: ["Keuangan", "Pencatatan Keuangan", "Tabungan", "Investasi", "Budget"],
+  description: "Aplikasi pencatatan keuangan modern dengan fitur lengkap untuk tracking kas masuk, keluar, dan target tabungan",
+  keywords: ["keuangan", "tracker", "kas", "tabungan", "investasi", "PWA"],
   authors: [{ name: "Tyger Earth | Ahtjong Labs" }],
+  manifest: "/manifest.json",
   icons: {
-    icon: "/favicon.ico",
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
   },
-  openGraph: {
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
     title: "Wealth Tracker",
-    description: "Aplikasi pencatatan keuangan modern",
-    type: "website",
+  },
+  formatDetection: {
+    telephone: false,
   },
 };
 
@@ -31,16 +53,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id" suppressHydrationWarning>
+    <html lang="id" className="dark" suppressHydrationWarning>
+      <head>
+        <link rel="apple-touch-icon" href="/logo.png" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+      </head>
       <body
-        className={`${inter.variable} antialiased bg-white text-gray-900`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground overflow-x-hidden`}
       >
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <ProfileProvider>
-            {children}
-            <Toaster />
-          </ProfileProvider>
-        </ThemeProvider>
+        {children}
+        <SonnerToaster position="top-center" />
       </body>
     </html>
   );

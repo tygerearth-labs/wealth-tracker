@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,106 +7,222 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model UserVisit {
-  id        String   @id @default(cuid())
-  ipAddress String
-  userAgent  String?
-  isNewUser Boolean @default(true)
-  visitCount Int      @default(1)
-  lastVisit DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([ipAddress])
-  @@index([isNewUser])
-}
-
-model Profile {
-  id        String   @id @default(cuid())
-  name      String
-  pin       String   @default("1234")
-  image     String?
-  ipAddress String?  // IP address saat profil dibuat
-  userAgent  String?  // Device/browser fingerprint
-  isActive  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  transactions     Transaction[]
-  categories       Category[]
-  savingsTargets   SavingsTarget[]
-  savingsAllocations SavingsAllocation[]
-}
-
-model Transaction {
-  id              String   @id @default(cuid())
-  profileId       String
-  type            String   // "INCOME" or "EXPENSE"
-  amount          Float
-  description     String?
-  categoryId      String
-  date            DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  profile   Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@index([profileId])
-  @@index([date])
-  @@index([type])
+model User {
+  id              String               @id @default(cuid())
+  email           String               @unique
+  username        String
+  password        String
+  image           String?
+  pin             String?
+  locale          String               @default("id")
+  currency        String               @default("IDR")
+  plan            String               @default("basic")
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  transactions    Transaction[]
+  categories      Category[]
+  savingsTargets  SavingsTarget[]
+  allocations     Allocation[]
+  businesses      Business[]
+  bizProducts     Product[]
+  bizSales        Sale[]
+  bizTransactions BusinessTransaction[]
+  bizCustomers    Customer[]
 }
 
 model Category {
-  id          String   @id @default(cuid())
-  profileId   String
-  name        String
-  type        String   // "INCOME" or "EXPENSE"
-  color       String?
-  icon        String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String       @id @default(cuid())
+  name          String
+  type          String
+  color         String?
+  icon          String?
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
-  profile      Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
+  @@unique([name, userId, type])
+  @@index([userId, type])
+}
 
-  @@index([profileId])
-  @@index([type])
+model Transaction {
+  id          String       @id @default(cuid())
+  type        String
+  amount      Float
+  description String?
+  categoryId  String
+  category    Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime     @default(now())
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  allocation  Allocation?
+
+  @@index([userId, date])
+  @@index([userId, type])
 }
 
 model SavingsTarget {
-  id              String   @id @default(cuid())
-  profileId       String
-  name            String
-  targetAmount    Float
-  currentAmount   Float    @default(0)
-  allocationPercentage Float   @default(0)  // Percentage of income to auto-allocate (0-100)
-  startDate       DateTime
-  endDate         DateTime
-  description     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id           String      @id @default(cuid())
+  name         String
+  targetAmount Float
+  currentAmount Float      @default(0)
+  targetDate   DateTime
+  initialInvestment Float  @default(0)
+  monthlyContribution Float
+  allocationPercentage Float @default(0)
+  isAllocated  Boolean     @default(false)
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  allocations  Allocation[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
-  profile              Profile              @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  savingsAllocations   SavingsAllocation[]
-
-  @@index([profileId])
+  @@index([userId])
 }
 
-model SavingsAllocation {
-  id              String   @id @default(cuid())
-  profileId       String
-  savingsTargetId String
-  transactionId   String?
+model Allocation {
+  id              String        @id @default(cuid())
+  transactionId   String        @unique
+  transaction     Transaction   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  targetId        String
+  target          SavingsTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount          Float
-  date            DateTime @default(now())
-  description     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  percentage      Float
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  profile        Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  savingsTarget  SavingsTarget  @relation(fields: [savingsTargetId], references: [id], onDelete: Cascade)
+  @@index([targetId, createdAt])
+  @@index([userId])
+}
 
-  @@index([profileId])
-  @@index([savingsTargetId])
+// ═══════════════════════════════════════════════════════════════
+// BUSINESS / PRO FEATURES
+// ═══════════════════════════════════════════════════════════════
+
+model Business {
+  id          String               @id @default(cuid())
+  name        String
+  category    String               @default("lainnya") // ritel, fnb, jasa, properti, elektronik, pendidikan, fashion, lainnya
+  description String?
+  features    String               @default("dashboard,products,sales,cashflow,pending,import-export") // comma-separated enabled features
+  address     String?
+  phone       String?
+  email       String?
+  logo        String?
+  userId      String
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products    Product[]
+  sales       Sale[]
+  transactions BusinessTransaction[]
+  customers   Customer[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([userId])
+}
+
+model Product {
+  id          String               @id @default(cuid())
+  name        String
+  type        String               // 'barang' | 'jasa'
+  category    String               // properti, kendaraan, elektronik, kursus, konsultasi, penyewaan, lainnya
+  description String?
+  price       Float
+  cost        Float?
+  stock       Int?
+  sku         String?              @unique
+  unit        String               @default("pcs")
+  businessId  String
+  business    Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sales       Sale[]
+  active      Boolean              @default(true)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([businessId])
+  @@index([userId])
+}
+
+model Sale {
+  id                String               @id @default(cuid())
+  invoiceNumber     String               @unique
+  productId         String
+  product           Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  businessId        String
+  business          Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId        String?
+  customer          Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  userId            String
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quantity          Int                  @default(1)
+  unitPrice         Float
+  totalPrice        Float
+  paymentStatus     String               @default("pending")  // pending | partial | paid
+  paidAmount        Float                @default(0)
+  paymentDueDate    DateTime?
+  customerName      String?
+  customerContact   String?
+  customerAddress   String?
+  notes             String?
+  personalAllocated Boolean              @default(false)
+  personalAmount    Float?
+  personalTxId      String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([businessId])
+  @@index([userId])
+  @@index([paymentStatus])
+  @@index([userId, createdAt])
+  @@index([customerId])
+}
+
+model BusinessTransaction {
+  id          String               @id @default(cuid())
+  businessId  String
+  business    Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String               // 'kas_besar' | 'kas_kecil' | 'pengeluaran'
+  amount      Float
+  description String?
+  category    String?
+  date        DateTime             @default(now())
+  referenceId String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([businessId])
+  @@index([userId, type])
+  @@index([userId, date])
+}
+
+model Customer {
+  id            String               @id @default(cuid())
+  name          String
+  phone         String?
+  email         String?
+  address       String?
+  notes         String?
+  businessId    String
+  business      Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sales         Sale[]
+  totalPurchases Float               @default(0)
+  totalSpent    Float                @default(0)
+  active        Boolean              @default(true)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@unique([phone, businessId])
+  @@index([businessId])
+  @@index([userId])
 }

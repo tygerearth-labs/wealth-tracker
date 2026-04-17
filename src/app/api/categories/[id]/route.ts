@@ -1,58 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { cookies } from 'next/headers';
 
-// GET single category
-export async function GET(
+export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('userId')?.value;
 
-    const category = await db.category.findUnique({
-      where: { id },
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const body = await request.json();
+    const { name, color, icon } = body;
+
+    // Verify category belongs to user
+    const existingCategory = await db.category.findFirst({
+      where: {
+        id,
+        userId,
+      },
     });
 
-    if (!category) {
+    if (!existingCategory) {
       return NextResponse.json(
         { error: 'Category not found' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(category);
-  } catch (error) {
-    console.error('Error fetching category:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch category' },
-      { status: 500 }
-    );
-  }
-}
-
-// PUT update category
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const body = await request.json();
-    const { name, type, color, icon } = body;
-
     const category = await db.category.update({
       where: { id },
       data: {
-        ...(name && { name }),
-        ...(type && { type }),
-        ...(color && { color }),
-        ...(icon !== undefined && { icon }),
+        ...(name !== undefined && { name }),
+        ...(color !== undefined && { color: color || null }),
+        ...(icon !== undefined && { icon: icon || null }),
       },
     });
 
-    return NextResponse.json(category);
+    return NextResponse.json({ category });
+
   } catch (error) {
-    console.error('Error updating category:', error);
+    console.error('Category PUT error:', error);
     return NextResponse.json(
       { error: 'Failed to update category' },
       { status: 500 }
@@ -60,21 +53,53 @@ export async function PUT(
   }
 }
 
-// DELETE category
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('userId')?.value;
+
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { id } = await params;
+
+    // Verify category belongs to user
+    const existingCategory = await db.category.findFirst({
+      where: {
+        id,
+        userId,
+      },
+      include: {
+        transactions: true,
+      },
+    });
+
+    if (!existingCategory) {
+      return NextResponse.json(
+        { error: 'Category not found' },
+        { status: 404 }
+      );
+    }
+
+    if (existingCategory.transactions.length > 0) {
+      return NextResponse.json(
+        { error: 'Cannot delete category with transactions' },
+        { status: 400 }
+      );
+    }
 
     await db.category.delete({
       where: { id },
     });
 
-    return NextResponse.json({ message: 'Category deleted successfully' });
+    return NextResponse.json({ success: true });
+
   } catch (error) {
-    console.error('Error deleting category:', error);
+    console.error('Category DELETE error:', error);
     return NextResponse.json(
       { error: 'Failed to delete category' },
       { status: 500 }
