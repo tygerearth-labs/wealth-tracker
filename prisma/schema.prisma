@@ -8,26 +8,27 @@ datasource db {
 }
 
 model User {
-  id              String               @id @default(cuid())
-  email           String               @unique
-  username        String
-  password        String
-  image           String?
-  pin             String?
-  locale          String               @default("id")
-  currency        String               @default("IDR")
-  plan            String               @default("basic")
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  transactions    Transaction[]
-  categories      Category[]
-  savingsTargets  SavingsTarget[]
-  allocations     Allocation[]
-  businesses      Business[]
-  bizProducts     Product[]
-  bizSales        Sale[]
-  bizTransactions BusinessTransaction[]
-  bizCustomers    Customer[]
+  id            String   @id @default(cuid())
+  email         String   @unique
+  username      String
+  password      String
+  image         String?
+  pin           String?
+  locale        String   @default("id")
+  currency      String   @default("IDR")
+  plan          String   @default("basic")
+  role          String   @default("user")
+  status        String   @default("active")
+  subscriptionEnd DateTime?
+  maxCategories  Int      @default(10)
+  maxSavings     Int      @default(3)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  transactions  Transaction[]
+  categories    Category[]
+  savingsTargets SavingsTarget[]
+  allocations   Allocation[]
+  inviteTokens  InviteToken[]
 }
 
 model Category {
@@ -100,129 +101,59 @@ model Allocation {
   @@index([userId])
 }
 
-// ═══════════════════════════════════════════════════════════════
-// BUSINESS / PRO FEATURES
-// ═══════════════════════════════════════════════════════════════
-
-model Business {
-  id          String               @id @default(cuid())
-  name        String
-  category    String               @default("lainnya") // ritel, fnb, jasa, properti, elektronik, pendidikan, fashion, lainnya
-  description String?
-  features    String               @default("dashboard,products,sales,cashflow,pending,import-export") // comma-separated enabled features
-  address     String?
-  phone       String?
+model InviteToken {
+  id          String   @id @default(cuid())
+  token       String   @unique
+  createdBy   String
+  creator     User     @relation(fields: [createdBy], references: [id])
   email       String?
-  logo        String?
-  userId      String
-  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  products    Product[]
-  sales       Sale[]
-  transactions BusinessTransaction[]
-  customers   Customer[]
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  plan        String   @default("basic")
+  maxUses     Int      @default(1)
+  usedCount   Int      @default(0)
+  expiresAt   DateTime?
+  usedBy      String?
+  isUsed      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  @@index([userId])
+  @@index([token])
+  @@index([createdBy])
 }
 
-model Product {
-  id          String               @id @default(cuid())
-  name        String
-  type        String               // 'barang' | 'jasa'
-  category    String               // properti, kendaraan, elektronik, kursus, konsultasi, penyewaan, lainnya
-  description String?
-  price       Float
-  cost        Float?
-  stock       Int?
-  sku         String?              @unique
-  unit        String               @default("pcs")
-  businessId  String
-  business    Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sales       Sale[]
-  active      Boolean              @default(true)
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  type      String   @default("info")
+  isActive  Boolean  @default(true)
+  priority  Int      @default(0)
+  startsAt  DateTime?
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@index([businessId])
-  @@index([userId])
+  @@index([isActive, priority])
+  @@index([type])
 }
 
-model Sale {
-  id                String               @id @default(cuid())
-  invoiceNumber     String               @unique
-  productId         String
-  product           Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
-  businessId        String
-  business          Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  customerId        String?
-  customer          Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  userId            String
-  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  quantity          Int                  @default(1)
-  unitPrice         Float
-  totalPrice        Float
-  paymentStatus     String               @default("pending")  // pending | partial | paid
-  paidAmount        Float                @default(0)
-  paymentDueDate    DateTime?
-  customerName      String?
-  customerContact   String?
-  customerAddress   String?
-  notes             String?
-  personalAllocated Boolean              @default(false)
-  personalAmount    Float?
-  personalTxId      String?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+model AdminActivityLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  action    String
+  target    String?
+  details   String?
+  createdAt DateTime @default(now())
 
-  @@index([businessId])
-  @@index([userId])
-  @@index([paymentStatus])
-  @@index([userId, createdAt])
-  @@index([customerId])
+  @@index([adminId, createdAt])
+  @@index([action])
+  @@index([createdAt])
 }
 
-model BusinessTransaction {
-  id          String               @id @default(cuid())
-  businessId  String
-  business    Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type        String               // 'kas_besar' | 'kas_kecil' | 'pengeluaran'
-  amount      Float
-  description String?
-  category    String?
-  date        DateTime             @default(now())
-  referenceId String?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
-
-  @@index([businessId])
-  @@index([userId, type])
-  @@index([userId, date])
-}
-
-model Customer {
-  id            String               @id @default(cuid())
-  name          String
-  phone         String?
-  email         String?
-  address       String?
-  notes         String?
-  businessId    String
-  business      Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  userId        String
-  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sales         Sale[]
-  totalPurchases Float               @default(0)
-  totalSpent    Float                @default(0)
-  active        Boolean              @default(true)
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-
-  @@unique([phone, businessId])
-  @@index([businessId])
-  @@index([userId])
+model PlatformConfig {
+  id                   String   @id @default("platform")
+  defaultPlan          String   @default("basic")
+  defaultMaxCategories Int      @default(10)
+  defaultMaxSavings    Int      @default(3)
+  autoSuspendExpired   Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
 }
